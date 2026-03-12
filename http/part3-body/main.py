@@ -25,7 +25,7 @@ def create_order(order: dict = Body(...)):
     }
     """
     order_id = len(orders) + 1
-    orders.append({"order_id": order_id, **order})
+    orders.append({"order_id": order_id, "detail": order})
     return {"message": "點餐成功", "order_id": order_id, "detail": order}
 
 

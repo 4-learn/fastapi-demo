@@ -24,4 +24,5 @@ def get_drink(drink_id: str):
     """
     if drink_id not in DRINKS:
         return {"error": f"找不到飲料：{drink_id}"}
-    return {"drink_id": drink_id, **DRINKS[drink_id]}
+    drink = DRINKS[drink_id]
+    return {"drink_id": drink_id, "name": drink["name"], "price": drink["price"]}

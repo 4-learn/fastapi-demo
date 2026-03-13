@@ -1,23 +1,19 @@
 from fastapi import FastAPI
-from tasks import sync_infinite_loop, async_infinite_loop
+import time
+import asyncio
 
 app = FastAPI()
 
-
 @app.get("/ping")
 async def ping():
-    return {"message": "pong"}
-
+    return {"status": "pong"}
 
 @app.get("/sync")
 async def sync_api():
-    """async 裡用 time.sleep - 會阻塞 event loop"""
-    sync_infinite_loop()
-    return {"message": "done"}
-
+    time.sleep(10)
+    return {"status": "done"}
 
 @app.get("/async")
 async def async_api():
-    """異步 API - 不會阻塞"""
-    await async_infinite_loop()
-    return {"message": "done"}
+    await asyncio.sleep(10)
+    return {"status": "done"}

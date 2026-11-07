@@ -1,122 +1,163 @@
-# 暖身：什麼是事件 API？
+# 暖身：用 curl 與 requests 呼叫 API
 
-> **定位**：API 不是函式呼叫——每一次 request 都代表系統中發生了一件事，而且這件事不能撤回。
+> **定位**：先當 API 的使用者。用現成的 httpbin 服務，練習送出請求、讀取回應。
 
 ## 學習目標
 
-完成本節後，你應該能夠：
-- 區分「函式呼叫思維」和「事件思維」
-- 把任何 API endpoint 重新理解成一個事件
-- 說出為什麼 AI 系統特別需要事件化設計
+- 用 curl 與 Python requests 呼叫 API。
+- 分辨 URL 上的查詢參數與 JSON body。
+- 看懂回應的狀態碼與資料。
 
----
+## 情境：把一筆通道事件送出去
 
-## 情境
+我們有一筆模擬資料：「aisle_01 通道被占用」。先練習把資料送到測試服務，確認對方收到什麼。
 
-你寫了一個 function：
-
-```python
-def calculate_risk(user_id: int) -> float:
-    return 0.85
-```
-
-參數不對？改了重跑。邏輯有 bug？修了重跑。這是函式呼叫的世界——可控、可重來。
-
-但 API 不是這樣。
-
-```
-POST /transactions/evaluate
-{"user_id": 123, "amount": 50000}
-```
-
-這個 request 一旦送出，事情就已經發生了。系統收到了一筆交易評估請求，不管你後來覺得 amount 打錯了，這筆「請求事件」已經存在。
-
----
-
-## 講解
-
-### 從函式到事件
+[httpbin](https://httpbin.org/) 會回傳收到的請求，適合練習；本章不會真的建立告警或保存事件。請使用模擬資料。
 
 ```mermaid
 flowchart LR
-    subgraph 函式呼叫
-        F1[呼叫] --> F2[執行] --> F3[回傳]
-        F3 -.->|失敗就重來| F1
-    end
-
-    subgraph 事件 API
-        E1[Request 送出] --> E2[事件已發生]
-        E2 --> E3[系統處理]
-        E3 --> E4[Response]
-    end
+    A["Client：curl / requests"] -->|HTTP Request| B["Server：httpbin"]
+    B -->|HTTP Response| A
 ```
 
-| | 函式呼叫 | 事件 API |
-|---|---------|---------|
-| 環境 | 你的程式裡 | 跨系統、跨網路 |
-| 可逆性 | 可以重跑 | 送出就發生了 |
-| 失敗處理 | try/except | 需要記錄 + 回溯 |
-| 追蹤性 | 通常不記錄 | 每次都該記錄 |
+## 1. 用 curl 發送 GET
 
-### 把 API 看成事件
+在終端機執行：
 
-任何 endpoint 都可以用三個問題來理解：
-
-- **什麼事件？** → endpoint 名稱（event type）
-- **內容是什麼？** → request body（event content）
-- **系統怎麼回應？** → response（acknowledgment）
-
-```
-POST /login
-→ 事件：使用者嘗試登入
-→ 內容：帳號、密碼
-→ 回應：成功 or 失敗
-
-POST /upload-image
-→ 事件：使用者上傳了一張圖片
-→ 內容：圖片資料
-→ 回應：已接收、處理中
-
-GET /recommendations
-→ 事件：使用者請求推薦
-→ 內容：（query parameters）
-→ 回應：推薦列表
+```bash
+curl -i "https://httpbin.org/get?zone=aisle_01"
 ```
 
-連 GET 都是事件——「使用者在這個時間點請求了這個資料」這件事本身就值得記錄。
+- `/get` 是這次呼叫的路徑。
+- `?zone=aisle_01` 是查詢參數（query parameter）。
+- `-i` 會一起顯示回應的狀態碼與 headers。
 
-### 為什麼 AI 系統特別需要事件思維？
+成功時，狀態碼為 `200`。回傳的 JSON 中，找找這一段：
 
-AI 系統有幾個特性讓事件化設計變得必要：
-
-- **模型會錯** → 你需要知道當時輸入是什麼，才能回去分析
-- **模型會改版** → 你需要用舊資料重跑新模型，比較結果
-- **行為會漂移** → 你需要長期追蹤模型表現
-
-如果 API 只是「呼叫 → 回傳」，這些事後分析全部做不到。但如果每次 request 都被當成事件記錄下來，你就有了完整的 audit trail。
-
----
-
-## Workshop
-
-### 題目
-
-以下三個 API，請分別回答：
-
-1. 這是什麼事件？
-2. 事件內容（body）應該包含什麼？
-3. 如果這個事件沒有被記錄，會有什麼風險？
-
-```
-POST /transactions/evaluate
-GET /users/123/history
-POST /alerts/dismiss
+```json
+"args": {
+  "zone": "aisle_01"
+}
 ```
 
-### 預期方向
+這是 httpbin 回傳的查詢參數，不是查到一筆真正的工廠紀錄。
 
-| API | 事件 | 內容 | 不記錄的風險 |
-|-----|------|------|-------------|
-| POST /transactions/evaluate | 交易風險評估請求 | user_id, amount, timestamp | 無法回溯模型當時的輸入 |
-| GET /users/123/history | 查詢使用者歷史 | query params（時間範圍等） | 不知道誰在什麼時候查了什麼 |
-| POST /alerts/dismiss | 關閉警報 | alert_id, reason | 無法追蹤誰關了警報、為什麼關 |
+## 2. 用 curl 發送 POST 與 JSON
+
+```bash
+curl -i -X POST "https://httpbin.org/post" \
+  -H "Content-Type: application/json" \
+  -d '{"event_type":"aisle_blocked","zone":"aisle_01"}'
+```
+
+- `-X POST`：指定 HTTP 方法。
+- `-H`：設定 header，這裡說明 body 使用 JSON 格式。
+- `-d`：放入要送出的資料。
+
+回應的 `json` 欄位應包含：
+
+```json
+"json": {
+  "event_type": "aisle_blocked",
+  "zone": "aisle_01"
+}
+```
+
+> 上面的換行寫法適用於 macOS / Linux 終端機。Windows PowerShell 可使用 `curl.exe`，並依終端機調整引號與換行。
+
+## 3. 改用 Python requests
+
+先在課程的虛擬環境中安裝：
+
+```bash
+python -m pip install requests
+```
+
+### GET：參數放在 params
+
+```python
+import requests
+
+response = requests.get(
+    "https://httpbin.org/get",
+    params={"zone": "aisle_01"},
+    timeout=10,
+)
+
+print(response.status_code)
+print(response.json()["args"])
+```
+
+預期看到 `200`，以及 `{"zone": "aisle_01"}`（Python 印出的引號可能不同）。
+
+### POST：資料放在 json
+
+```python
+import requests
+
+event = {"event_type": "aisle_blocked", "zone": "aisle_01"}
+
+response = requests.post(
+    "https://httpbin.org/post",
+    json=event,
+    timeout=10,
+)
+
+print(response.status_code)
+print(response.json()["json"])
+```
+
+`json=event` 會幫忙轉成 JSON，並設定對應的 Content-Type。`timeout=10` 用來避免連線或等待資料時一直卡住。
+
+### 對照一下
+
+| 要做的事 | curl | requests |
+| --- | --- | --- |
+| 查詢參數 | URL 的 `?zone=...` | `params={...}` |
+| JSON body | `-H` 搭配 `-d` | `json={...}` |
+| 回應狀態 | `-i` 顯示狀態碼 | `response.status_code` |
+| 回應資料 | 終端機直接顯示 | `response.json()` 或 `.text` |
+
+`response.json()` 是把回應解析成 Python 資料，不代表請求一定成功；也不是每個回應都有 JSON。
+
+## Workshop：只寫 Client
+
+### 任務 1：換一個查詢參數
+
+把區域改成 `aisle_02`，分別用 curl 與 requests 發送 GET。
+
+**驗收**：兩邊回應的 `args.zone` 都是 `aisle_02`。
+
+### 任務 2：送出自己的模擬事件
+
+使用 POST 傳送以下資料，先用 curl，再用 requests：
+
+```json
+{
+  "event_type": "aisle_blocked",
+  "zone": "aisle_02",
+  "duration_seconds": 5
+}
+```
+
+**驗收**：回應的 `json` 欄位包含這三個欄位；`duration_seconds` 是數字。
+
+### 任務 3：看看非 200 的回應
+
+```python
+import requests
+
+response = requests.get("https://httpbin.org/status/404", timeout=10)
+print(response.status_code)
+print(repr(response.text))
+```
+
+**觀察**：狀態碼是 `404`，body 為空；這時不要直接呼叫 `response.json()`。這個網址是 httpbin 專門用來模擬 404 的端點。
+
+完成後，請指出每次請求的 **方法、URL、參數或 body，以及回應狀態碼**。
+
+## 下一步
+
+現在已經能呼叫別人的 API。下一章用 FastAPI 建立自己的入口，再用相同的 Client 呼叫它。
+
+參考：[requests 官方 Quickstart](https://requests.readthedocs.io/en/latest/user/quickstart/)｜[httpbin](https://httpbin.org/)

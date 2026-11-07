@@ -1,0 +1,4 @@
+# Python 3.12; direct dependencies used by the course demos.
+fastapi==0.115.0
+uvicorn==0.30.6
+pandas==2.2.3

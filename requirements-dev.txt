@@ -1,0 +1,4 @@
+-r requirements.txt
+# Optional: local API smoke tests using FastAPI's TestClient.
+httpx==0.27.2
+pytest==8.3.5

@@ -11,15 +11,17 @@ from datetime import datetime
 # --------------------------------------------------
 class EventRejected(Exception):
     """事件被系統拒絕（格式正確但邏輯不接受）"""
-    def __init__(self, reason: str, event_type: str = "unknown"):
+    def __init__(self, reason: str, event_type: str = "unknown", code: str = "EVENT_REJECTED"):
         self.reason = reason
         self.event_type = event_type
+        self.code = code
 
 
 class EventNotFound(Exception):
     """事件對象不存在"""
-    def __init__(self, reason: str):
+    def __init__(self, reason: str, code: str = "NOT_FOUND"):
         self.reason = reason
+        self.code = code
 
 
 # --------------------------------------------------
@@ -50,7 +52,8 @@ async def handle_event_rejected(request, exc):
         content={
             "status": "rejected",
             "event_type": exc.event_type,
-            "reason": exc.reason
+            "reason": exc.reason,
+            "code": exc.code
         }
     )
 
@@ -61,7 +64,8 @@ async def handle_event_not_found(request, exc):
         status_code=404,
         content={
             "status": "rejected",
-            "reason": exc.reason
+            "reason": exc.reason,
+            "code": exc.code
         }
     )
 
@@ -73,6 +77,7 @@ async def handle_validation_error(request, exc):
         content={
             "status": "rejected",
             "reason": "Event does not match schema",
+            "code": "SCHEMA_INVALID",
             "details": exc.errors()
         }
     )
@@ -86,12 +91,14 @@ def receive_event(event_type: str, event: EventPayload):
     if event_type not in SUPPORTED_TYPES:
         raise EventRejected(
             reason=f"Unsupported event type: {event_type}",
-            event_type=event_type
+            event_type=event_type,
+            code="EVENT_TYPE_NOT_SUPPORTED"
         )
 
     if event.user_id not in KNOWN_USERS:
         raise EventNotFound(
-            reason=f"User {event.user_id} not found"
+            reason=f"User {event.user_id} not found",
+            code="USER_NOT_FOUND"
         )
 
     # 故意留下的 bug：沒先檢查 payload 有沒有 amount

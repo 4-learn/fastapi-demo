@@ -5,7 +5,7 @@ PORT=8005
 # 測試 sync（會阻塞）
 echo "=== 測試 /sync (會阻塞) ==="
 curl -s http://localhost:$PORT/sync &
-sleep 2
+sleep 1
 echo "嘗試 ping..."
 timeout 3 curl -s http://localhost:$PORT/ping || echo "TIMEOUT - 被阻塞了！"
 

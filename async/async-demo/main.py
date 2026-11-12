@@ -10,10 +10,10 @@ async def ping():
 
 @app.get("/sync")
 async def sync_api():
-    time.sleep(10)
+    time.sleep(5)
     return {"status": "done"}
 
 @app.get("/async")
 async def async_api():
-    await asyncio.sleep(10)
+    await asyncio.sleep(5)
     return {"status": "done"}

@@ -12,3 +12,5 @@ httpx==0.27.2
 pytest==8.3.5
 # Pin anyio: newer versions make starlette 0.38's TestClient emit a DeprecationWarning.
 anyio==4.6.2
+# Python client that calls the API (pydantic/client.py).
+requests==2.32.3

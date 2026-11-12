@@ -94,6 +94,11 @@ def receive_event(event_type: str, event: EventPayload):
             reason=f"User {event.user_id} not found"
         )
 
+    # 故意留下的 bug：沒先檢查 payload 有沒有 amount
+    # transaction 少了 amount → KeyError → 500（系統的錯）
+    if event_type == "transaction":
+        event.payload["amount"]
+
     return {
         "status": "accepted",
         "event_type": event_type,

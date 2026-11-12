@@ -1,13 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Body
 
 app = FastAPI()
 
 @app.get("/")
 def root():
-    return {"message": "Hello FastAPI"}
+    return {"message": "alive"}
 
 @app.post("/echo")
-def echo(data: dict):
-    return {
-        "received": data
-    }
+def echo(data: dict = Body()):
+    return {"received": data}

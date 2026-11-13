@@ -7,7 +7,7 @@
 ```
 async-demo/
 ├── main.py      # FastAPI 應用
-├── tasks.py     # 無窮迴圈任務
+├── server.sh    # 啟動 server（port 8005）
 ├── test.sh      # 測試腳本
 └── README.md
 ```
@@ -16,44 +16,22 @@ async-demo/
 
 | API | 實作 | 結果 |
 |-----|------|------|
-| `/sync` | `async def` + `time.sleep()` | 阻塞 event loop |
-| `/async` | `async def` + `await asyncio.sleep()` | 不阻塞 |
-
-## 關鍵程式碼
-
-```python
-# tasks.py
-def sync_infinite_loop():
-    while True:
-        time.sleep(1)  # 阻塞！不會讓出控制權
-
-async def async_infinite_loop():
-    while True:
-        await asyncio.sleep(1)  # 讓出控制權給 event loop
-```
-
-```python
-# main.py
-@app.get("/sync")
-async def sync_api():
-    sync_infinite_loop()  # 阻塞整個 server
-
-@app.get("/async")
-async def async_api():
-    await async_infinite_loop()  # 其他請求仍可處理
-```
+| `/sync` | `async def` + `time.sleep(5)` | 阻塞 event loop，`/ping` 也要等 |
+| `/async` | `async def` + `await asyncio.sleep(5)` | 不阻塞，`/ping` 馬上回 |
 
 ## 測試
 
 ```bash
-# 啟動 server
-uvicorn main:app --port 8005
+# 終端機 A：啟動 server
+bash server.sh
 
-# 另一個終端執行測試
-./test.sh
+# 終端機 B：執行測試
+bash test.sh
 ```
 
-## 預期結果
+`test.sh` 測完 `/sync` 之後，會自己重啟 server，再測 `/async`。
+
+## 預期結果（節錄）
 
 ```
 === 測試 /sync (會阻塞) ===
@@ -62,8 +40,10 @@ TIMEOUT - 被阻塞了！
 
 === 測試 /async (不會阻塞) ===
 嘗試 ping...
-{"message":"pong"} <- 成功回應！
+{"status":"pong"} <- 成功回應！
 ```
+
+中間還會穿插 `{"status":"done"}` 和 server 的 `INFO:` 記錄，是背景請求跑完時印出來的，可以忽略。
 
 ## 重點
 

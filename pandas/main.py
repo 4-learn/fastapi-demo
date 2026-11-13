@@ -69,7 +69,11 @@ def get_event_breakdown(user_id: int) -> dict:
     return {
         "user_id": user_id,
         "breakdown": {
-            event_type: row.to_dict()
+            event_type: {
+                "count": int(row["count"]),
+                "total_amount": float(row["total_amount"]),
+                "avg_confidence": round(float(row["avg_confidence"]), 2),
+            }
             for event_type, row in grouped.iterrows()
         },
     }

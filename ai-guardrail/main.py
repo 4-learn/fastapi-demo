@@ -27,6 +27,7 @@ class Action(str, Enum):
     AUTO_BLOCK = "auto_block"
     REQUIRE_REVIEW = "require_review"
     DEFER = "defer"
+    NONE = "none"
 
 
 class DecisionResponse(BaseModel):
@@ -61,10 +62,20 @@ THRESHOLDS = {
 
 def evaluate(prediction: Prediction) -> DecisionResponse:
     """
-    根據模型輸出的 confidence，決定系統行動。
+    先看模型的判斷（label），再看信心值（confidence），決定系統行動。
 
     模型負責算，系統負責決定。
     """
+    # 模型說不是詐欺：不用處理，信心值再高也一樣
+    if prediction.label != "fraud":
+        return DecisionResponse(
+            prediction=prediction.label,
+            confidence=prediction.confidence,
+            risk_level=RiskLevel.LOW,
+            action=Action.NONE,
+            reason="模型判斷不是詐欺，不需處理",
+        )
+
     if prediction.confidence >= THRESHOLDS["auto"]:
         return DecisionResponse(
             prediction=prediction.label,
@@ -118,7 +129,7 @@ class EventBody(BaseModel):
 @app.post("/evaluate")
 def evaluate_prediction(body: EventBody):
     # 1. 模型已經算完，拿到 prediction
-    # 2. 系統根據 confidence 決定行動
+    # 2. 系統根據 label 和 confidence 決定行動
     decision = evaluate(body.prediction)
 
     # 3. 把決策記錄成事件

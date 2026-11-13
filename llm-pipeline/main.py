@@ -76,9 +76,9 @@ def fake_llm_summarize(data: dict) -> str:
 # Service
 # --------------------------------------------------
 def prepare_features(user_id: int) -> dict:
-    """從 Event Store 整理特徵，給 AI 用"""
+    """從 Event Store 整理特徵，給 AI 用（只算交易）"""
     df = pd.read_csv(DATA_PATH)
-    user_df = df[df["user_id"] == user_id]
+    user_df = df[(df["user_id"] == user_id) & (df["event_type"] == "transaction")]
 
     if user_df.empty:
         return {"user_id": user_id, "total_events": 0,
@@ -97,13 +97,15 @@ def evaluate_risk(user_id: int) -> RiskResult:
     features = prepare_features(user_id)
     prediction = fake_ai_predict(features)
 
-    # 防呆：低信心不自動處理
-    if prediction["confidence"] >= 0.8:
-        action = "auto_flag"
+    # 防呆：只有高風險才可能自動處理，低信心不自動處理
+    if prediction["label"] == "low_risk":
+        action = "none"             # 低風險：不用處理
+    elif prediction["label"] == "high_risk" and prediction["confidence"] >= 0.8:
+        action = "auto_flag"        # 高風險且模型有把握：自動標記
     elif prediction["confidence"] >= 0.6:
-        action = "require_review"
+        action = "require_review"   # 有疑慮：交給人審核
     else:
-        action = "defer"
+        action = "defer"            # 模型沒把握：先不決定
 
     return RiskResult(
         user_id=user_id,

@@ -6,7 +6,7 @@
 """
 import asyncio
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 
 app = FastAPI(title="Streaming Demo")
@@ -31,6 +31,9 @@ def fake_llm_chunks(user_id: int) -> list[str]:
 # --------------------------------------------------
 @app.get("/summary/{user_id}")
 async def summary(user_id: int):
+    if user_id not in SUMMARY:
+        raise HTTPException(status_code=404, detail=f"找不到使用者：{user_id}")
+
     chunks = fake_llm_chunks(user_id)
     await asyncio.sleep(0.5 * len(chunks))  # 模擬 LLM 慢慢生成
     return {"summary": "".join(chunks)}

@@ -9,14 +9,21 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
-
-from main import Base, app, get_db
 
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
     "postgresql+psycopg://postgres:postgres@localhost:5432/events_test",
 )
+# 保護教學預設：只允許專用 events_test，避免刪到 events。
+if make_url(TEST_DATABASE_URL).database != "events_test":
+    raise RuntimeError("測試只允許使用 events_test 資料庫")
+
+# 必須先設定再 import：lifespan 也要連到測試資料庫。
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+from main import Base, app, get_db
+
 test_engine = create_engine(TEST_DATABASE_URL)
 
 
@@ -28,9 +35,6 @@ def get_test_db():
         yield session
 
 
-app.dependency_overrides[get_db] = get_test_db
-
-
 # --------------------------------------------------
 # 每個測試開始前：清空資料表，從乾淨的狀態開始
 # --------------------------------------------------
@@ -38,8 +42,14 @@ app.dependency_overrides[get_db] = get_test_db
 def client():
     Base.metadata.drop_all(test_engine)
     Base.metadata.create_all(test_engine)
-    with TestClient(app) as c:
-        yield c
+    previous_overrides = app.dependency_overrides.copy()
+    app.dependency_overrides[get_db] = get_test_db
+    try:
+        with TestClient(app) as c:
+            yield c
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous_overrides)
 
 
 EVENT = {"user_id": 123, "timestamp": "2025-01-10T12:00:00", "payload": {"amount": 1200}}
@@ -66,5 +76,7 @@ def test_get_missing_event(client):
 
 
 def test_invalid_user_id(client):
-    r = client.post("/events/login", json={**EVENT, "user_id": 0})
+    invalid_event = EVENT.copy()
+    invalid_event["user_id"] = 0
+    r = client.post("/events/login", json=invalid_event)
     assert r.status_code == 422

@@ -1,5 +1,4 @@
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from datetime import datetime
 from enum import Enum
@@ -10,6 +9,7 @@ from enum import Enum
 # --------------------------------------------------
 class Prediction(BaseModel):
     """模型回傳的原始判斷"""
+    # 本 Demo 僅示範 overheat / normal；這裡不限制其他字串。
     label: str
     confidence: float = Field(ge=0.0, le=1.0)
 
@@ -24,7 +24,7 @@ class RiskLevel(str, Enum):
 
 
 class Action(str, Enum):
-    AUTO_BLOCK = "auto_block"
+    AUTO_ALERT = "auto_alert"
     REQUIRE_REVIEW = "require_review"
     DEFER = "defer"
     NONE = "none"
@@ -66,14 +66,14 @@ def evaluate(prediction: Prediction) -> DecisionResponse:
 
     模型負責算，系統負責決定。
     """
-    # 模型說不是詐欺：不用處理，信心值再高也一樣
-    if prediction.label != "fraud":
+    # 模型說不是機房過熱：不用處理，信心值再高也一樣
+    if prediction.label != "overheat":
         return DecisionResponse(
             prediction=prediction.label,
             confidence=prediction.confidence,
             risk_level=RiskLevel.LOW,
             action=Action.NONE,
-            reason="模型判斷不是詐欺，不需處理",
+            reason="模型判斷不是機房過熱，不需處理",
         )
 
     if prediction.confidence >= THRESHOLDS["auto"]:
@@ -81,8 +81,8 @@ def evaluate(prediction: Prediction) -> DecisionResponse:
             prediction=prediction.label,
             confidence=prediction.confidence,
             risk_level=RiskLevel.HIGH,
-            action=Action.AUTO_BLOCK,
-            reason="信心值足夠，系統自動處理",
+            action=Action.AUTO_ALERT,
+            reason="信心值足夠，建議自動告警",
         )
 
     if prediction.confidence >= THRESHOLDS["review"]:
@@ -99,7 +99,7 @@ def evaluate(prediction: Prediction) -> DecisionResponse:
         confidence=prediction.confidence,
         risk_level=RiskLevel.LOW,
         action=Action.DEFER,
-        reason="信心值過低，系統不做判斷",
+        reason="信心值過低，暫不開告警，保留判斷結果",
     )
 
 
@@ -118,7 +118,7 @@ def to_event(source_event_id: str, decision: DecisionResponse) -> DecisionEvent:
 # --------------------------------------------------
 # App
 # --------------------------------------------------
-app = FastAPI(title="AI Guardrail Demo")
+app = FastAPI(title="Machine Room AI Guardrail Demo")
 
 
 class EventBody(BaseModel):
@@ -132,7 +132,8 @@ def evaluate_prediction(body: EventBody):
     # 2. 系統根據 label 和 confidence 決定行動
     decision = evaluate(body.prediction)
 
-    # 3. 把決策記錄成事件
+    # 3. 組成決策事件並回傳；本 Demo 不持久化、不發通知、不控制設備。
+    # 不代表實際已完成告警或人工審核。
     event = to_event(body.event_id, decision)
 
     return {

@@ -16,10 +16,15 @@ DATA_PATH = Path(__file__).parent / "events.csv"
 # Schema
 # --------------------------------------------------
 class RiskRequest(BaseModel):
+    event_id: str
+    event_type: str
     location: str
+    duration_seconds: float = Field(ge=0)
+    confidence: float = Field(ge=0, le=1)
 
 
 class RiskResult(BaseModel):
+    event_id: str
     location: str
     risk_level: str
     confidence: float
@@ -36,12 +41,14 @@ class SummaryResult(BaseModel):
 
 
 class TaskRequest(BaseModel):
-    location: str
+    event_id: str
     reason: str
 
 
 class TaskResult(BaseModel):
     task_id: str
+    event_id: str
+    reason: str
     status: str
     created_at: datetime
 
@@ -51,16 +58,14 @@ class TaskResult(BaseModel):
 # --------------------------------------------------
 def fake_ai_predict(features: dict) -> dict:
     """模擬 AI 模型回傳結果"""
-    avg_conf = features.get("avg_confidence", 0.5)
-    total = features.get("total_duration_seconds", 0)
-
-    # 簡單規則模擬模型行為
-    if total > 2000 and avg_conf < 0.7:
-        return {"label": "high_risk", "confidence": 0.85}
-    elif total > 1000:
-        return {"label": "medium_risk", "confidence": 0.65}
+    # 單筆通道阻塞的教學假規則，不是真實模型或安全標準。
+    if features["event_type"] != "aisle_blocked":
+        label = "low_risk"
+    elif features["duration_seconds"] > 120:
+        label = "high_risk"
     else:
-        return {"label": "low_risk", "confidence": 0.92}
+        label = "medium_risk"
+    return {"label": label, "confidence": features["confidence"]}
 
 
 def fake_llm_summarize(data: dict) -> str:
@@ -92,9 +97,13 @@ def prepare_features(location: str) -> dict:
     }
 
 
-def evaluate_risk(location: str) -> RiskResult:
-    """Pipeline 1: 推論 — 整理特徵 → AI 推論 → 防呆"""
-    features = prepare_features(location)
+def evaluate_risk(event: RiskRequest) -> RiskResult:
+    """Pipeline 1：評估單筆事件，不查位置歷史。"""
+    features = {
+        "event_type": event.event_type,
+        "duration_seconds": event.duration_seconds,
+        "confidence": event.confidence,
+    }
     prediction = fake_ai_predict(features)
 
     # 防呆：只有高風險才可能自動處理，低信心不自動處理
@@ -108,7 +117,8 @@ def evaluate_risk(location: str) -> RiskResult:
         action = "defer"            # 模型沒把握：先不決定
 
     return RiskResult(
-        location=location,
+        event_id=event.event_id,
+        location=event.location,
         risk_level=prediction["label"],
         confidence=prediction["confidence"],
         action=action,
@@ -133,10 +143,12 @@ def summarize_location(location: str, use_llm: bool = False) -> SummaryResult:
     )
 
 
-def create_review_task(location: str, reason: str) -> TaskResult:
+def create_review_task(event_id: str, reason: str) -> TaskResult:
     """Pipeline 3: 任務觸發 — 建立審核事件"""
     return TaskResult(
         task_id=str(uuid4())[:8],
+        event_id=event_id,
+        reason=reason,
         status="pending",
         created_at=datetime.now(),
     )
@@ -151,16 +163,16 @@ app = FastAPI(title="LLM Pipeline Demo")
 # Pipeline 1: 推論
 @app.post("/risk/evaluate")
 def risk_evaluate(req: RiskRequest):
-    return evaluate_risk(req.location)
+    return evaluate_risk(req)
 
 
 # Pipeline 2: 摘要
 @app.get("/locations/{location}/summary")
-def user_summary(location: str, llm: bool = False):
+def location_summary(location: str, llm: bool = False):
     return summarize_location(location, use_llm=llm)
 
 
 # Pipeline 3: 任務觸發
 @app.post("/tasks/review")
 def trigger_review(req: TaskRequest):
-    return create_review_task(req.location, req.reason)
+    return create_review_task(req.event_id, req.reason)
